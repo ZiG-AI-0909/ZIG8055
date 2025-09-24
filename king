@@ -1,0 +1,278 @@
+{
+  "name": "Voice Leads Finder BOT",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{$credentials.telegramApi.accessToken}}/getFile?file_id={{$json[\"message\"][\"voice\"][\"file_id\"]}}",
+        "responseFormat": "json"
+      },
+      "id": "2",
+      "name": "Get File Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/file/bot{{$credentials.telegramApi.accessToken}}/{{$json[\"result\"][\"file_path\"]}}",
+        "responseFormat": "file"
+      },
+      "id": "3",
+      "name": "Download Voice File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "modelId": "whisper-1"
+      },
+      "id": "4",
+      "name": "OpenAI Whisper",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [950, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "2",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json[\"text\"] || \"\";\nreturn [{json: {query: text}}];"
+      },
+      "id": "5",
+      "name": "Extract Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://google.serper.dev/search",
+        "method": "POST",
+        "authentication": "headerAuth",
+        "responseFormat": "json",
+        "jsonBody": "={ \"q\": $json.query }",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-API-KEY",
+              "value": "YOUR_SERPER_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "6",
+      "name": "Web Search Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $json.organic || [];\nconst leads = [];\n\nresults.forEach(r => {\n  leads.push({\n    email: (r.snippet.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-z]{2,}/) || [])[0] || \"\",\n    firstName: \"\",\n    lastName: \"\",\n    phone: \"\",\n    company: r.title || \"\",\n    jobTitle: \"\",\n    source: \"Web Search\",\n    websiteUrl: r.link,\n    linkedinUrl: \"\",\n    city: \"\",\n    state: \"\",\n    zipCode: \"\",\n    country: \"\",\n    leadType: \"Discovered\",\n    campaignName: \"VoiceBotCampaign\",\n    preferredContact: \"Email\",\n    newsletterOptIn: \"No\",\n    smsOptIn: \"No\",\n    tags: \"Auto,Search\",\n    notes: r.snippet\n  });\n});\n\nreturn leads.map(l => ({json:l}));"
+      },
+      "id": "7",
+      "name": "Process Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1700, 200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Leads",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{$json.email}}",
+            "FirstName": "={{$json.firstName}}",
+            "LastName": "={{$json.lastName}}",
+            "Phone": "={{$json.phone}}",
+            "Company": "={{$json.company}}",
+            "JobTitle": "={{$json.jobTitle}}",
+            "Source": "={{$json.source}}",
+            "WebsiteUrl": "={{$json.websiteUrl}}",
+            "LinkedinUrl": "={{$json.linkedinUrl}}",
+            "City": "={{$json.city}}",
+            "State": "={{$json.state}}",
+            "ZipCode": "={{$json.zipCode}}",
+            "Country": "={{$json.country}}",
+            "LeadType": "={{$json.leadType}}",
+            "CampaignName": "={{$json.campaignName}}",
+            "PreferredContact": "={{$json.preferredContact}}",
+            "NewsletterOptIn": "={{$json.newsletterOptIn}}",
+            "SmsOptIn": "={{$json.smsOptIn}}",
+            "Tags": "={{$json.tags}}",
+            "Notes": "={{$json.notes}}"
+          }
+        }
+      },
+      "id": "8",
+      "name": "Update Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1950, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const leads = $input.all().map(i => i.json);\nconst chatId = $node[\"Telegram Trigger\"].json[\"message\"][\"chat\"][\"id\"];\nlet text = `✅ Found ${leads.length} leads and saved into Google Sheets!`;\n\nfor (const l of leads.slice(0, 3)) {\n  text += `\\n\\n🏢 ${l.company}\\n✉️ ${l.email}\\n🔗 ${l.websiteUrl}`;\n}\n\nreturn [{json:{chatId,text}}];"
+      },
+      "id": "9",
+      "name": "Prepare Telegram Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2200, 200]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{$json.chatId}}",
+        "text": "={{$json.text}}"
+      },
+      "id": "10",
+      "name": "Send Telegram Response",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2450, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get File Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File Info": {
+      "main": [
+        [
+          {
+            "node": "Download Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Voice File": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Whisper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Whisper": {
+      "main": [
+        [
+          {
+            "node": "Extract Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Query": {
+      "main": [
+        [
+          {
+            "node": "Web Search Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Search Leads": {
+      "main": [
+        [
+          {
+            "node": "Process Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Leads": {
+      "main": [
+        [
+          {
+            "node": "Update Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Prepare Telegram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Telegram Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
