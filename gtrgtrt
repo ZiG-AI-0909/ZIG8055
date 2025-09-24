@@ -1,0 +1,122 @@
+{
+  "name": "Clean Leads & Update Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "leads-cleaner",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Leads"
+      },
+      "id": "2",
+      "name": "Google Sheets Read",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [450, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": "YOUR_GOOGLE_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawLeads = $json.body || [];\n\n// get existing emails from previous node\nconst existingEmails = $node[\"Google Sheets Read\"].json.map(r => (r.Email || r.email || '').toLowerCase());\n\nconst cleanLeads = [];\n\nfor (const lead of rawLeads) {\n  const normalized = {\n    email: lead.email || \"\",\n    firstName: lead.firstName || \"\",\n    lastName: lead.lastName || \"\",\n    phone: lead.phone || \"\",\n    company: lead.company || \"\",\n    jobTitle: lead.jobTitle || \"\",\n    source: lead.source || \"WebhookImport\",\n    totalPurchases: lead.totalPurchases || \"0\",\n    lastPurchaseDate: lead.lastPurchaseDate || \"\",\n    lifetimeValue: lead.lifetimeValue || \"0\",\n    cartValue: lead.cartValue || \"0\",\n    productInterest: lead.productInterest || \"\",\n    websiteUrl: lead.websiteUrl || \"\",\n    linkedinUrl: lead.linkedinUrl || \"\",\n    city: lead.city || \"\",\n    state: lead.state || \"\",\n    zipCode: lead.zipCode || \"\",\n    country: lead.country || \"\",\n    leadType: lead.leadType || \"Cold\",\n    campaignName: lead.campaignName || \"Webhook Campaign\",\n    preferredContact: lead.preferredContact || \"Email\",\n    newsletterOptIn: lead.newsletterOptIn || \"No\",\n    smsOptIn: lead.smsOptIn || \"No\",\n    tags: Array.isArray(lead.tags) ? lead.tags.join(\", \") : (lead.tags || \"\"),\n    notes: lead.notes || \"\"\n  };\n\n  if (normalized.email && !existingEmails.includes(normalized.email.toLowerCase())) {\n    cleanLeads.push({ json: normalized });\n  }\n}\n\nreturn cleanLeads;"
+      },
+      "id": "3",
+      "name": "Clean & Deduplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Leads",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{$json.email}}",
+            "FirstName": "={{$json.firstName}}",
+            "LastName": "={{$json.lastName}}",
+            "Phone": "={{$json.phone}}",
+            "Company": "={{$json.company}}",
+            "JobTitle": "={{$json.jobTitle}}",
+            "Source": "={{$json.source}}",
+            "TotalPurchases": "={{$json.totalPurchases}}",
+            "LastPurchaseDate": "={{$json.lastPurchaseDate}}",
+            "LifetimeValue": "={{$json.lifetimeValue}}",
+            "CartValue": "={{$json.cartValue}}",
+            "ProductInterest": "={{$json.productInterest}}",
+            "WebsiteUrl": "={{$json.websiteUrl}}",
+            "LinkedinUrl": "={{$json.linkedinUrl}}",
+            "City": "={{$json.city}}",
+            "State": "={{$json.state}}",
+            "ZipCode": "={{$json.zipCode}}",
+            "Country": "={{$json.country}}",
+            "LeadType": "={{$json.leadType}}",
+            "CampaignName": "={{$json.campaignName}}",
+            "PreferredContact": "={{$json.preferredContact}}",
+            "NewsletterOptIn": "={{$json.newsletterOptIn}}",
+            "SmsOptIn": "={{$json.smsOptIn}}",
+            "Tags": "={{$json.tags}}",
+            "Notes": "={{$json.notes}}"
+          }
+        }
+      },
+      "id": "4",
+      "name": "Google Sheets Append",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [950, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": "YOUR_GOOGLE_CREDENTIAL"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Read": {
+      "main": [
+        [
+          {
+            "node": "Clean & Deduplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean & Deduplicate": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
