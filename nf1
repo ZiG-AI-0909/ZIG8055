@@ -1,0 +1,251 @@
+{
+  "name": "Telegram Voice Leads To Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"]
+      },
+      "id": "1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{$credentials.telegramApi.accessToken}}/getFile?file_id={{$json[\"message\"][\"voice\"][\"file_id\"]}}",
+        "responseFormat": "json"
+      },
+      "id": "2",
+      "name": "Get File Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/file/bot{{$credentials.telegramApi.accessToken}}/{{$json[\"result\"][\"file_path\"]}}",
+        "responseFormat": "file"
+      },
+      "id": "3",
+      "name": "Download Voice File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "modelId": "whisper-1"
+      },
+      "id": "4",
+      "name": "OpenAI Whisper",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [950, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "2",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json[\"text\"] || \"\";\nconst countries = [];\n\nconst mapping = {\n  \"uk\": \"United Kingdom\",\n  \"us\": \"United States\",\n  \"usa\": \"United States\",\n  \"canada\": \"Canada\"\n};\n\nconst lower = text.toLowerCase();\nfor (const [key, val] of Object.entries(mapping)) {\n  if (lower.includes(key)) countries.push(val);\n}\n\nreturn [{json: { command: text, countries }}];"
+      },
+      "id": "5",
+      "name": "Extract Countries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const countries = $json[\"countries\"];\nconst leads = countries.map(c => ({\n  email: `lead_${c.replace(/ /g,'').toLowerCase()}@demo.com`,\n  firstName: \"John\",\n  lastName: \"Doe\",\n  phone: \"+100000000\",\n  company: \"DemoCorp\",\n  jobTitle: \"Manager\",\n  source: \"Telegram Bot\",\n  totalPurchases: \"0\",\n  lastPurchaseDate: \"\",\n  lifetimeValue: \"0\",\n  cartValue: \"0\",\n  productInterest: \"Software\",\n  websiteUrl: \"https://example.com\",\n  linkedinUrl: \"https://linkedin.com/in/demo\",\n  city: \"Sample City\",\n  state: \"Test State\",\n  zipCode: \"12345\",\n  country: c,\n  leadType: \"Cold\",\n  campaignName: \"VoiceBotCampaign\",\n  preferredContact: \"Email\",\n  newsletterOptIn: \"Yes\",\n  smsOptIn: \"No\",\n  tags: \"Demo,Test\",\n  notes: `Generated from voice command for ${c}`\n}));\n\nreturn leads.map(l => ({json:l}));"
+      },
+      "id": "6",
+      "name": "Generate Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Leads",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{$json.email}}",
+            "FirstName": "={{$json.firstName}}",
+            "LastName": "={{$json.lastName}}",
+            "Phone": "={{$json.phone}}",
+            "Company": "={{$json.company}}",
+            "JobTitle": "={{$json.jobTitle}}",
+            "Source": "={{$json.source}}",
+            "TotalPurchases": "={{$json.totalPurchases}}",
+            "LastPurchaseDate": "={{$json.lastPurchaseDate}}",
+            "LifetimeValue": "={{$json.lifetimeValue}}",
+            "CartValue": "={{$json.cartValue}}",
+            "ProductInterest": "={{$json.productInterest}}",
+            "WebsiteUrl": "={{$json.websiteUrl}}",
+            "LinkedinUrl": "={{$json.linkedinUrl}}",
+            "City": "={{$json.city}}",
+            "State": "={{$json.state}}",
+            "ZipCode": "={{$json.zipCode}}",
+            "Country": "={{$json.country}}",
+            "LeadType": "={{$json.leadType}}",
+            "CampaignName": "={{$json.campaignName}}",
+            "PreferredContact": "={{$json.preferredContact}}",
+            "NewsletterOptIn": "={{$json.newsletterOptIn}}",
+            "SmsOptIn": "={{$json.smsOptIn}}",
+            "Tags": "={{$json.tags}}",
+            "Notes": "={{$json.notes}}"
+          }
+        },
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        }
+      },
+      "id": "7",
+      "name": "Update Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1700, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatId = $node[\"Telegram Trigger\"].json[\"message\"][\"chat\"][\"id\"];\nconst text = `✅ Leads have been written to Google Sheets!`;\nreturn [{json:{chatId,text}}];"
+      },
+      "id": "8",
+      "name": "Prepare Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1950, 200]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{$json.chatId}}",
+        "text": "={{$json.text}}"
+      },
+      "id": "9",
+      "name": "Send Telegram Response",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2200, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get File Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File Info": {
+      "main": [
+        [
+          {
+            "node": "Download Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Voice File": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Whisper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Whisper": {
+      "main": [
+        [
+          {
+            "node": "Extract Countries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Countries": {
+      "main": [
+        [
+          {
+            "node": "Generate Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Leads": {
+      "main": [
+        [
+          {
+            "node": "Update Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
