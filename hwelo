@@ -1,0 +1,206 @@
+{
+  "name": "Telegram Voice Leads Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"]
+      },
+      "id": "1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "credentials": {
+        "telegramApi": "YOUR_TELEGRAM_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"message\"][\"voice\"] !== undefined}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "2",
+      "name": "Check if Voice",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{$credentials.telegramApi.accessToken}}/getFile?file_id={{$json[\"message\"][\"voice\"][\"file_id\"]}}",
+        "responseFormat": "json"
+      },
+      "id": "3",
+      "name": "Get File Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [600, 300],
+      "credentials": {
+        "httpHeaderAuth": "YOUR_TELEGRAM_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/file/bot{{$credentials.telegramApi.accessToken}}/{{$json[\"result\"][\"file_path\"]}}",
+        "responseFormat": "file",
+        "options": {
+          "response": {
+            "responseFormat": "file",
+            "binaryPropertyName": "data"
+          }
+        }
+      },
+      "id": "4",
+      "name": "Download Voice File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [800, 300],
+      "credentials": {
+        "httpHeaderAuth": "YOUR_TELEGRAM_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "modelId": "whisper-1",
+        "binaryPropertyName": "data"
+      },
+      "id": "5",
+      "name": "OpenAI Whisper",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1000, 300],
+      "credentials": {
+        "openAiApi": "YOUR_OPENAI_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "mode": "chat",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a lead generation assistant. Given a country command, generate structured JSON leads with fields: email, firstName, lastName, phone, company, jobTitle, source, totalPurchases, lastPurchaseDate, lifetimeValue, cartValue, productInterest, websiteUrl, linkedinUrl, city, state, zipCode, country, leadType, campaignName, preferredContact, newsletterOptIn, smsOptIn, tags, notes."
+          },
+          {
+            "role": "user",
+            "content": "={{$json[\"text\"]}}"
+          }
+        ]
+      },
+      "id": "6",
+      "name": "AI Generate Leads",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1200, 300],
+      "credentials": {
+        "openAiApi": "YOUR_OPENAI_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.choices[0].message.content;\nlet leads;\ntry {\n  leads = JSON.parse(raw);\n} catch (e) {\n  throw new Error(\"AI did not return valid JSON: \" + raw);\n}\nreturn leads.map(l => ({json: l}));"
+      },
+      "id": "7",
+      "name": "Parse AI JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Sheet1",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{$json.email}}",
+            "FirstName": "={{$json.firstName}}",
+            "LastName": "={{$json.lastName}}",
+            "Phone": "={{$json.phone}}",
+            "Company": "={{$json.company}}",
+            "JobTitle": "={{$json.jobTitle}}",
+            "Source": "={{$json.source}}",
+            "TotalPurchases": "={{$json.totalPurchases}}",
+            "LastPurchaseDate": "={{$json.lastPurchaseDate}}",
+            "LifetimeValue": "={{$json.lifetimeValue}}",
+            "CartValue": "={{$json.cartValue}}",
+            "ProductInterest": "={{$json.productInterest}}",
+            "WebsiteUrl": "={{$json.websiteUrl}}",
+            "LinkedinUrl": "={{$json.linkedinUrl}}",
+            "City": "={{$json.city}}",
+            "State": "={{$json.state}}",
+            "ZipCode": "={{$json.zipCode}}",
+            "Country": "={{$json.country}}",
+            "LeadType": "={{$json.leadType}}",
+            "CampaignName": "={{$json.campaignName}}",
+            "PreferredContact": "={{$json.preferredContact}}",
+            "NewsletterOptIn": "={{$json.newsletterOptIn}}",
+            "SmsOptIn": "={{$json.smsOptIn}}",
+            "Tags": "={{$json.tags}}",
+            "Notes": "={{$json.notes}}"
+          }
+        }
+      },
+      "id": "8",
+      "name": "Save to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1600, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": "YOUR_GOOGLE_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{$node[\"Telegram Trigger\"].json[\"message\"][\"chat\"][\"id\"]}}",
+        "text": "✅ Leads have been generated and saved to Google Sheets!"
+      },
+      "id": "9",
+      "name": "Reply to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1800, 300],
+      "credentials": {
+        "telegramApi": "YOUR_TELEGRAM_CREDENTIAL"
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{"node": "Check if Voice","type": "main","index": 0}]]
+    },
+    "Check if Voice": {
+      "main": [[{"node": "Get File Info","type": "main","index": 0}], []]
+    },
+    "Get File Info": {
+      "main": [[{"node": "Download Voice File","type": "main","index": 0}]]
+    },
+    "Download Voice File": {
+      "main": [[{"node": "OpenAI Whisper","type": "main","index": 0}]]
+    },
+    "OpenAI Whisper": {
+      "main": [[{"node": "AI Generate Leads","type": "main","index": 0}]]
+    },
+    "AI Generate Leads": {
+      "main": [[{"node": "Parse AI JSON","type": "main","index": 0}]]
+    },
+    "Parse AI JSON": {
+      "main": [[{"node": "Save to Google Sheet","type": "main","index": 0}]]
+    },
+    "Save to Google Sheet": {
+      "main": [[{"node": "Reply to Telegram","type": "main","index": 0}]]
+    }
+  }
+}
