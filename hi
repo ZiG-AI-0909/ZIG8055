@@ -1,0 +1,159 @@
+{
+  "name": "Telegram Voice Leads Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"]
+      },
+      "id": "1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "credentials": {
+        "telegramApi": "YOUR_TELEGRAM_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [],
+          "number": [],
+          "string": [],
+          "multiOption": [],
+          "expression": [
+            {
+              "value": "={{$json[\"message\"][\"voice\"] !== undefined}}"
+            }
+          ]
+        }
+      },
+      "id": "2",
+      "name": "Check if Voice",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "fileId": "={{$json[\"message\"][\"voice\"][\"file_id\"]}}"
+      },
+      "id": "3",
+      "name": "Get Voice File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [600, 300],
+      "credentials": {
+        "telegramApi": "YOUR_TELEGRAM_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "method": "POST",
+        "authentication": "headerAuth",
+        "sendBinaryData": true,
+        "binaryPropertyName": "data",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENAI_API_KEY"
+            }
+          ]
+        },
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            }
+          ]
+        }
+      },
+      "id": "4",
+      "name": "Transcribe Voice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "mode": "chat",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a lead generation assistant. Given a country command, generate structured JSON leads with fields: email, firstName, lastName, phone, company, jobTitle, source, totalPurchases, lastPurchaseDate, lifetimeValue, cartValue, productInterest, websiteUrl, linkedinUrl, city, state, zipCode, country, leadType, campaignName, preferredContact, newsletterOptIn, smsOptIn, tags, notes."
+          },
+          {
+            "role": "user",
+            "content": "={{$json[\"text\"]}}"
+          }
+        ]
+      },
+      "id": "5",
+      "name": "AI Generate Leads",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1000, 300],
+      "credentials": {
+        "openAiApi": "YOUR_OPENAI_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID",
+        "range": "Sheet1!A1:Z1",
+        "options": {},
+        "fields": {
+          "values": "={{$json[\"data\"]}}"
+        }
+      },
+      "id": "6",
+      "name": "Save to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [1200, 300],
+      "credentials": {
+        "googleApi": "YOUR_GOOGLE_CREDENTIAL"
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json[\"message\"][\"chat\"][\"id\"]}}",
+        "text": "✅ Leads have been generated and saved to Google Sheets!"
+      },
+      "id": "7",
+      "name": "Reply to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1400, 300],
+      "credentials": {
+        "telegramApi": "YOUR_TELEGRAM_CREDENTIAL"
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{"node": "Check if Voice","type": "main","index": 0}]]
+    },
+    "Check if Voice": {
+      "main": [[{"node": "Get Voice File","type": "main","index": 0}], []]
+    },
+    "Get Voice File": {
+      "main": [[{"node": "Transcribe Voice","type": "main","index": 0}]]
+    },
+    "Transcribe Voice": {
+      "main": [[{"node": "AI Generate Leads","type": "main","index": 0}]]
+    },
+    "AI Generate Leads": {
+      "main": [[{"node": "Save to Google Sheet","type": "main","index": 0}]]
+    },
+    "Save to Google Sheet": {
+      "main": [[{"node": "Reply to Telegram","type": "main","index": 0}]]
+    }
+  }
+}
