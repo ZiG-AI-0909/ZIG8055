@@ -1,0 +1,147 @@
+{
+  "name": "LEAD GEN AI WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 180
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        200
+      ],
+      "id": "1"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\"command\": \"Find leads from Tech startups, manufacturing companies, IT services (Small and medium scale preferably), healthcare (Medium to large scale with minimum 30 employees), architecture/design, retail (multi-store/Brands which are online and trying to get off-line presence), Educational institutions Bangalore, India one result in one batch\"}"
+      },
+      "name": "Edit Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        400,
+        200
+      ],
+      "id": "2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.command }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "IDENTITY\nYou are LeadGen-AI, a professional B2B lead generation agent. Return verified business leads in structured JSON format."
+        }
+      },
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        200
+      ],
+      "id": "3"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"output\": []}"
+      },
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        800,
+        200
+      ],
+      "id": "4"
+    },
+    {
+      "parameters": {
+        "url": "https://julio-pollened-katheryn.ngrok-free.dev/bulk-send",
+        "method": "POST",
+        "bodyContentType": "json",
+        "jsonParameters": true,
+        "headerParametersJson": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "bodyParametersJson": [
+          {
+            "name": "messages",
+            "value": "={{ $json.output.map(lead => ({ number: lead.phone, message: `Hi ${lead.firstName}, I noticed your company ${lead.company} and wanted to connect!` })) ) }}"
+          }
+        ]
+      },
+      "name": "Send WhatsApp via VenomBot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        200
+      ],
+      "id": "5"
+    }
+  ],
+  "connections": {
+    "1": {
+      "main": [
+        [
+          {
+            "node": "2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2": {
+      "main": [
+        [
+          {
+            "node": "3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3": {
+      "main": [
+        [
+          {
+            "node": "4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4": {
+      "main": [
+        [
+          {
+            "node": "5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "active": false,
+  "settings": {},
+  "id": "workflow-leadgen-whatsapp"
+}
